@@ -1,0 +1,9 @@
+@page "/knowledge"
+@rendermode InteractiveServer
+@inject KrishiMitra.Web.Services.FarmApiClient Api
+
+<PageTitle>ಕೃಷಿ ಮಾಹಿತಿ — KrishiMitra</PageTitle>
+<section class="welcome-card page-card"><p class="eyebrow">ಸರಳ ಕೃಷಿ ಮಾಹಿತಿ</p><h1>ಕೃಷಿ ಮಾಹಿತಿ</h1><p class="welcome-copy">ಡೆಮೊ ಶೈಕ್ಷಣಿಕ ವಿಷಯಗಳು. ಸ್ಥಳೀಯ ತಜ್ಞರ ಸಲಹೆಗೆ ಪರ್ಯಾಯವಲ್ಲ.</p>
+    @foreach (var item in Documents) { <article class="knowledge-card"><div class="knowledge-meta">@item.CropType · @(item.Language == "kn" ? "ಕನ್ನಡ" : "English")</div><h2>@item.Title</h2><p>@item.Content</p><small>ಮೂಲ: @item.SourceName @if (item.SourceUrl is not null) { <a href="@item.SourceUrl" target="_blank" rel="noopener noreferrer">ಮೂಲ ತೆರೆಯಿರಿ</a> }</small></article> }
+</section>
+@code { private List<KnowledgeDocument> Documents { get; set; } = []; protected override async Task OnInitializedAsync() { try { Documents = await Api.GetAsync<List<KnowledgeDocument>>("api/knowledge") ?? []; } catch { } } }

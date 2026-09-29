@@ -1,0 +1,55 @@
+@page "/activities"
+@rendermode InteractiveServer
+@inject KrishiMitra.Web.Services.FarmApiClient Api
+
+<PageTitle>ಚಟುವಟಿಕೆಗಳು — KrishiMitra</PageTitle>
+<section class="welcome-card page-card">
+    <p class="eyebrow">ತೋಟದ ದಾಖಲೆಗಳು</p><h1>ಕೃಷಿ ಚಟುವಟಿಕೆಗಳು</h1><p class="welcome-copy">ನಡೆದ ಕೆಲಸಗಳು ಮತ್ತು ಖರ್ಚುಗಳನ್ನು ದಾಖಲಿಸಿ.</p>
+    @if (!string.IsNullOrEmpty(Message)) { <p class="notice @(Error ? "error" : "success")" role="status">@Message</p> }
+    <div class="toolbar activity-toolbar"><label>ಚಟುವಟಿಕೆ ಪ್ರಕಾರ <select @bind="Filter" @bind:after="Load"><option value="">ಎಲ್ಲಾ</option>@foreach (var kind in Kinds) { <option>@kind</option> }</select></label><label>ಇಂದಿನಿಂದ<InputDate @bind-Value="FromDate" @bind-Value:after="Load" /></label><label>ಇಲ್ಲಿಯವರೆಗೆ<InputDate @bind-Value="ToDate" @bind-Value:after="Load" /></label><div class="expense-total">ಆಯ್ದ ಅವಧಿಯ ಖರ್ಚು <strong>₹ @TotalExpenses.ToString("N2")</strong></div></div>
+    <EditForm Model="Form" OnValidSubmit="Save" class="entry-form">
+        <h2>@(EditingId is null ? "ಚಟುವಟಿಕೆ ಸೇರಿಸಿ" : "ಚಟುವಟಿಕೆ ತಿದ್ದುಪಡಿ")</h2>
+        <DataAnnotationsValidator /><ValidationSummary />
+        <div class="form-grid compact-grid">
+            <label>ಪ್ರಕಾರ<InputSelect @bind-Value="Form.ActivityType">@foreach (var kind in Kinds) { <option value="@kind">@kind</option> }</InputSelect></label>
+            <label>ದಿನಾಂಕ<InputDate @bind-Value="Form.ActivityDate" /></label>
+            <label class="wide-field">ವಿವರಣೆ<InputText @bind-Value="Form.Description" maxlength="500" required /></label>
+            <label>ಪ್ರಮಾಣ (ಐಚ್ಛಿಕ)<InputNumber @bind-Value="Form.Quantity" min="0" step="0.01" /></label>
+            <label>ಘಟಕ<InputText @bind-Value="Form.Unit" maxlength="30" /></label>
+            <label>ಖರ್ಚು (₹)<InputNumber @bind-Value="Form.ExpenseAmount" min="0" step="0.01" /></label>
+            <label>ಟಿಪ್ಪಣಿ<InputText @bind-Value="Form.Notes" maxlength="1000" /></label>
+        </div>
+        <button class="primary-button" type="submit">@(EditingId is null ? "ದಾಖಲಿಸಿ" : "ಬದಲಾವಣೆ ಉಳಿಸಿ")</button>
+        @if (EditingId is not null) { <button class="secondary-button" type="button" @onclick="CancelEdit">ರದ್ದು</button> }
+    </EditForm>
+    <div class="table-list">
+        @foreach (var item in Items)
+        {
+            <article class="record-row"><div><strong>@item.ActivityType <small class="data-origin">@(item.IsDemo ? "ಮಾದರಿ ಡೇಟಾ" : "ನಿಮ್ಮ ದಾಖಲಾತಿ")</small></strong><span>@item.Description</span><small>@item.ActivityDate.ToString("dd MMM yyyy") @if (item.ExpenseAmount.HasValue) { <text> · ₹@item.ExpenseAmount.Value.ToString("N2")</text> }</small></div><div class="row-actions"><button class="text-button" @onclick="() => Edit(item)">ತಿದ್ದು</button><button class="text-button danger-text" @onclick="() => Delete(item.Id)">ಅಳಿಸಿ</button></div></article>
+        }
+        @if (Items.Count == 0) { <p class="empty-note">ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆಗಳಿಲ್ಲ. ಮೇಲಿನ ನಮೂನೆಯಿಂದ ಮೊದಲ ದಾಖಲೆಯನ್ನು ಸೇರಿಸಿ.</p> }
+    </div>
+</section>
+
+@code {
+    private static readonly string[] Kinds = ["ನೀರುಹಾಕುವುದು", "ಗೊಬ್ಬರ", "ಕತ್ತರಿಸುವುದು", "ಕೊಯ್ಲು", "ಕೀಟ ವೀಕ್ಷಣೆ", "ಸಾಮಾನ್ಯ ನಿರ್ವಹಣೆ", "ಇತರೆ"];
+    private Farm? Farm { get; set; }
+    private List<FarmActivity> Items { get; set; } = [];
+    private ActivityForm Form { get; set; } = new();
+    private int? EditingId { get; set; }
+    private decimal TotalExpenses { get; set; }
+    private string Filter { get; set; } = "";
+    private DateOnly? FromDate { get; set; }
+    private DateOnly? ToDate { get; set; }
+    private string Message { get; set; } = "";
+    private bool Error { get; set; }
+    protected override async Task OnInitializedAsync() { try { Farm = (await Api.FarmsAsync()).FirstOrDefault(); await Load(); } catch { Message = "API ಸಂಪರ್ಕ ವಿಫಲವಾಗಿದೆ. API ಅನ್ನು ಪ್ರಾರಂಭಿಸಿ."; Error = true; } }
+    protected override async Task OnParametersSetAsync() { await Load(); }
+    private async Task Load() { if (Farm is null) return; var query = new List<string>(); if (!string.IsNullOrWhiteSpace(Filter)) query.Add("type=" + Uri.EscapeDataString(Filter)); if (FromDate.HasValue) query.Add("from=" + FromDate.Value.ToString("yyyy-MM-dd")); if (ToDate.HasValue) query.Add("to=" + ToDate.Value.ToString("yyyy-MM-dd")); var suffix = query.Count == 0 ? "" : "?" + string.Join("&", query); var result = await Api.GetAsync<Result>($"api/farms/{Farm.Id}/activities{suffix}"); Items = result?.Items ?? []; TotalExpenses = result?.TotalExpenses ?? 0; }
+    private async Task Save() { if (Farm is null) { Message = "ಮೊದಲು ನನ್ನ ತೋಟದಲ್ಲಿ ತೋಟದ ವಿವರಗಳನ್ನು ಸೇರಿಸಿ."; Error = true; return; } try { var input = new ActivityInput(Form.ActivityType, Form.ActivityDate, Form.Description, Form.Quantity, Form.Unit, Form.ExpenseAmount, Form.Notes); if (EditingId is null) await Api.PostAsync<FarmActivity>($"api/farms/{Farm.Id}/activities", input); else await Api.PutAsync<FarmActivity>($"api/farms/{Farm.Id}/activities/{EditingId}", input); Form = new(); EditingId = null; Message = "ಚಟುವಟಿಕೆಯನ್ನು ಉಳಿಸಲಾಗಿದೆ."; Error = false; await Load(); } catch { Message = "ಚಟುವಟಿಕೆ ಉಳಿಸಲಾಗಲಿಲ್ಲ. ನಮೂದುಗಳನ್ನು ಪರಿಶೀಲಿಸಿ."; Error = true; } }
+    private void Edit(FarmActivity x) { EditingId = x.Id; Form = new() { ActivityType = x.ActivityType, ActivityDate = x.ActivityDate, Description = x.Description, Quantity = x.Quantity, Unit = x.Unit, ExpenseAmount = x.ExpenseAmount, Notes = x.Notes }; }
+    private void CancelEdit() { EditingId = null; Form = new(); }
+    private async Task Delete(int id) { if (Farm is null) return; try { await Api.DeleteAsync($"api/farms/{Farm.Id}/activities/{id}"); await Load(); } catch { Message = "ಚಟುವಟಿಕೆ ಅಳಿಸಲಾಗಲಿಲ್ಲ."; Error = true; } }
+    private sealed record Result(List<FarmActivity> Items, decimal TotalExpenses);
+    private sealed class ActivityForm { public string ActivityType { get; set; } = Kinds[0]; [Required, StringLength(500)] public string Description { get; set; } = ""; public DateOnly ActivityDate { get; set; } = DateOnly.FromDateTime(DateTime.Today); public decimal? Quantity { get; set; } public string? Unit { get; set; } public decimal? ExpenseAmount { get; set; } public string? Notes { get; set; } }
+}

@@ -1,0 +1,42 @@
+@page "/assistant"
+@rendermode InteractiveServer
+@inject KrishiMitra.Web.Services.FarmApiClient Api
+
+<PageTitle>ಕೃಷಿಮಿತ್ರನನ್ನು ಕೇಳಿ — KrishiMitra</PageTitle>
+<section class="welcome-card page-card chat-page">
+    <div class="page-heading"><div><p class="eyebrow">ಕೃಷಿ ಮಾಹಿತಿ ಸಹಾಯಕ</p><h1>ಕೃಷಿಮಿತ್ರನನ್ನು ಕೇಳಿ</h1><p class="welcome-copy">ಸರಳವಾಗಿ ಕೇಳಿ. ಗಂಭೀರ ಸಮಸ್ಯೆಗೆ ಸ್ಥಳೀಯ ಕೃಷಿ ತಜ್ಞರನ್ನು ಸಂಪರ್ಕಿಸಿ.</p></div><button class="secondary-button" @onclick="NewConversation">ಹೊಸ ಸಂಭಾಷಣೆ</button></div>
+    <p class="notice">ಡೆಮೊ ಸಹಾಯಕವು ಸಾಮಾನ್ಯ ಮಾಹಿತಿ ಮಾತ್ರ ನೀಡುತ್ತದೆ. ರಾಸಾಯನಿಕ ಪ್ರಮಾಣ ಅಥವಾ ಖಚಿತ ರೋಗ ನಿರ್ಣಯವನ್ನು ಕೇಳಬೇಡಿ.</p>
+    <div class="prompt-chips"><button @onclick="ExampleOne">ಚಟುವಟಿಕೆಗಳನ್ನು ಹೇಗೆ ದಾಖಲಿಸಲಿ?</button><button @onclick="ExampleTwo">ಕೃಷಿ ಅಧಿಕಾರಿಗೆ ಏನು ತಿಳಿಸಲಿ?</button><button @onclick="ExampleThree">ಖರ್ಚುಗಳನ್ನು ಹೇಗೆ ದಾಖಲಿಸಲಿ?</button></div>
+    <div class="conversation" aria-live="polite">
+        @foreach (var message in Messages)
+        {
+            <article class="chat-message @(message.Role == "user" ? "from-user" : "from-assistant")"><span class="message-author">@(message.Role == "user" ? "ನೀವು" : "ಕೃಷಿಮಿತ್ರ")</span><p>@message.Content</p></article>
+        }
+        @if (Loading) { <p class="loading-note" role="status">ಉತ್ತರ ಸಿದ್ಧವಾಗುತ್ತಿದೆ…</p> }
+    </div>
+    @if (Sources.Count > 0)
+    {
+        <aside class="source-list"><strong>ಬಳಸಿದ ಡೆಮೊ ಮಾಹಿತಿ</strong>@foreach (var source in Sources) { <p>@source.Title <small>· @source.SourceName</small></p> }</aside>
+    }
+    @if (!string.IsNullOrEmpty(Error)) { <p class="notice error" role="alert">@Error</p> }
+    <EditForm Model="this" OnValidSubmit="Send" class="chat-compose">
+        <label class="visually-hidden" for="chat-question">ನಿಮ್ಮ ಪ್ರಶ್ನೆ</label><InputTextArea id="chat-question" @bind-Value="Question" maxlength="2000" rows="2" placeholder="ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಕನ್ನಡ ಅಥವಾ English ನಲ್ಲಿ ಬರೆಯಿರಿ..." />
+        <button class="primary-button" type="submit" disabled="@(Loading || string.IsNullOrWhiteSpace(Question))">ಕಳುಹಿಸಿ →</button>
+    </EditForm>
+</section>
+
+@code {
+    private string Question { get; set; } = "";
+    private string Error { get; set; } = "";
+    private bool Loading { get; set; }
+    private List<MessageItem> Messages { get; set; } = [];
+    private List<KnowledgeDocument> Sources { get; set; } = [];
+    protected override async Task OnInitializedAsync() => await LoadHistory();
+    private async Task LoadHistory() { try { Messages = await Api.GetAsync<List<MessageItem>>("api/ai/chat") ?? []; } catch { Error = "AI/API ಸೇವೆಯನ್ನು ಸಂಪರ್ಕಿಸಲಾಗಲಿಲ್ಲ. API ಅನ್ನು ಪ್ರಾರಂಭಿಸಿ."; } }
+    private async Task Send() { if (string.IsNullOrWhiteSpace(Question) || Loading) return; var asked = Question.Trim(); Messages.Add(new("user", asked)); Question = ""; Loading = true; Error = ""; try { var response = await Api.PostAsync<ChatOutput>("api/ai/chat", new ChatInput(asked)); if (response is not null) { Messages.Add(new("assistant", (response.IsDemo ? "[ಡೆಮೊ] " : "") + response.Answer)); Sources = response.Sources.ToList(); } } catch { Error = "ಉತ್ತರ ಪಡೆಯಲಾಗಲಿಲ್ಲ. ಸ್ವಲ್ಪ ಸಮಯದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."; } finally { Loading = false; } }
+    private async Task NewConversation() { try { await Api.DeleteAsync("api/ai/chat"); Messages.Clear(); Sources.Clear(); Error = ""; } catch { Error = "ಸಂಭಾಷಣೆಯನ್ನು ತೆರವುಗೊಳಿಸಲಾಗಲಿಲ್ಲ."; } }
+    private void ExampleOne() => Question = "What activities should I record for my arecanut farm?";
+    private void ExampleTwo() => Question = "What information should I collect before consulting an agricultural officer?";
+    private void ExampleThree() => Question = "How can I keep track of fertilizer expenses?";
+    private sealed record MessageItem(string Role, string Content, DateTime CreatedAt = default);
+}

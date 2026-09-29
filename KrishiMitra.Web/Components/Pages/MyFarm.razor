@@ -1,0 +1,39 @@
+@page "/farm"
+@rendermode InteractiveServer
+@inject KrishiMitra.Web.Services.FarmApiClient Api
+
+<PageTitle>ನನ್ನ ತೋಟ — KrishiMitra</PageTitle>
+<section class="welcome-card page-card">
+    <div class="page-heading"><div><p class="eyebrow">ನಿಮ್ಮ ದಾಖಲೆಗಳು</p><h1>ನನ್ನ ತೋಟ</h1><p class="welcome-copy">ನಿಮ್ಮ ಕೃಷಿ ವಿವರಗಳನ್ನು ವೀಕ್ಷಿಸಿ ಮತ್ತು ನವೀಕರಿಸಿ.</p></div><span class="demo-badge">Demo profile</span></div>
+    <p class="notice">ಡೆಮೊ ಮೋಡ್: ಇಲ್ಲಿ ನೈಜ ವೈಯಕ್ತಿಕ ಅಥವಾ ಕೃಷಿ ಮಾಹಿತಿಯನ್ನು ನಮೂದಿಸಬೇಡಿ. @if (Farm?.IsDemo == true) { <strong>ಈ ಪ್ರೊಫೈಲ್ ಮಾದರಿ ಡೇಟಾ.</strong> }</p>
+    @if (!string.IsNullOrEmpty(Message)) { <p class="notice @(IsError ? "error" : "success")" role="status">@Message</p> }
+    @if (Farm is null) { <p>ತೋಟದ ವಿವರಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ…</p> }
+    else
+    {
+        <EditForm Model="Farm" OnValidSubmit="Save" class="farm-form">
+            <div class="form-grid">
+                <label>ತೋಟದ ಹೆಸರು<InputText @bind-Value="Farm.FarmName" maxlength="100" required /></label>
+                <label>ರೈತರ ಹೆಸರು<InputText @bind-Value="Farm.FarmerName" maxlength="100" required /></label>
+                <label>ಸ್ಥಳ<InputText @bind-Value="Farm.Location" maxlength="100" required /></label>
+                <label>ಜಿಲ್ಲೆ<InputText @bind-Value="Farm.District" maxlength="100" /></label>
+                <label>ರಾಜ್ಯ<InputText @bind-Value="Farm.State" maxlength="100" /></label>
+                <label>ಮುಖ್ಯ ಬೆಳೆ<InputText @bind-Value="Farm.CropType" maxlength="80" required /></label>
+                <label>ವಿಸ್ತೀರ್ಣ (ಎಕರೆ)<InputNumber @bind-Value="Farm.AreaInAcres" min="0.01" step="0.01" required /></label>
+                <label>ನಾಟಿ ದಿನಾಂಕ<InputDate @bind-Value="Farm.PlantingDate" /></label>
+                <label class="wide-field">ಟಿಪ್ಪಣಿಗಳು<InputTextArea @bind-Value="Farm.Notes" maxlength="1000" rows="3" /></label>
+            </div>
+            <button type="submit" class="primary-button" disabled="@Saving">@(Saving ? "ಉಳಿಸಲಾಗುತ್ತಿದೆ…" : Farm.Id == 0 ? "ತೋಟ ರಚಿಸಿ" : "ಬದಲಾವಣೆಗಳನ್ನು ಉಳಿಸಿ")</button>
+        </EditForm>
+        @if (Farm.Id > 0) { <div class="danger-zone"><div><strong>ಡೆಮೊ ತೋಟ ತೆಗೆದುಹಾಕಿ</strong><p>ಈ ಕ್ರಿಯೆ ತೋಟದ ಚಟುವಟಿಕೆಗಳು ಮತ್ತು ಜ್ಞಾಪನೆಗಳನ್ನು ಸಹ ಅಳಿಸುತ್ತದೆ.</p></div><button type="button" class="danger-button" @onclick="Delete">ಅಳಿಸಿ</button></div> }
+    }
+</section>
+
+@code {
+    private Farm? Farm { get; set; }
+    private bool Saving { get; set; }
+    private bool IsError { get; set; }
+    private string Message { get; set; } = "";
+    protected override async Task OnInitializedAsync() { try { Farm = (await Api.FarmsAsync()).FirstOrDefault() ?? new Farm { State = "Karnataka", CropType = "Arecanut" }; } catch { Message = "API server ಅನ್ನು ಪ್ರಾರಂಭಿಸಿ."; IsError = true; } }
+    private async Task Save() { if (Farm is null) return; Saving = true; try { var input = new FarmInput(Farm.FarmName, Farm.FarmerName, Farm.Location, Farm.District, Farm.State, Farm.CropType, Farm.AreaInAcres, Farm.PlantingDate, Farm.Notes); Farm = Farm.Id == 0 ? await Api.PostAsync<Farm>("api/farms", input) : await Api.PutAsync<Farm>($"api/farms/{Farm.Id}", input); Message = "ನಿಮ್ಮ ತೋಟದ ವಿವರಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ."; IsError = false; } catch { Message = "ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಅಗತ್ಯ ಮಾಹಿತಿಯನ್ನು ಪರಿಶೀಲಿಸಿ."; IsError = true; } finally { Saving = false; } }
+    private async Task Delete() { if (Farm is null) return; try { await Api.DeleteAsync($"api/farms/{Farm.Id}"); Farm = new Farm { State = "Karnataka", CropType = "Arecanut" }; Message = "ಡೆಮೊ ತೋಟವನ್ನು ಅಳಿಸಲಾಗಿದೆ. ಹೊಸ ತೋಟವನ್ನು ರಚಿಸಬಹುದು."; IsError = false; } catch { Message = "ತೋಟವನ್ನು ಅಳಿಸಲಾಗಲಿಲ್ಲ."; IsError = true; } }
+}

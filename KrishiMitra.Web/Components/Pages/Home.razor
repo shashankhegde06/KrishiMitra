@@ -1,0 +1,112 @@
+@page "/"
+@rendermode InteractiveServer
+@inject KrishiMitra.Web.Services.FarmApiClient Api
+
+<PageTitle>KrishiMitra — ನಿಮ್ಮ ಕೃಷಿ ಗೆಳೆಯ</PageTitle>
+
+<div class="dashboard">
+
+    <section class="welcome-card" aria-labelledby="welcome-title">
+        <h1 id="welcome-title">ನಮಸ್ಕಾರ, @(Farm?.FarmerName ?? "ರೈತರೆ")! <span aria-hidden="true">👋</span></h1>
+        <p class="welcome-copy">ನಿಮ್ಮ ಕೃಷಿಯ ಚಟುವಟಿಕೆಗಳನ್ನು ನಿರ್ವಹಿಸಿ.</p>
+        @if (!string.IsNullOrEmpty(LoadError)) { <p class="notice error" role="alert">@LoadError</p> }
+        <div class="quick-actions"><a href="/assistant">ಕೃಷಿಮಿತ್ರನನ್ನು ಕೇಳಿ <span>→</span></a><a href="/activities">ಚಟುವಟಿಕೆ ಸೇರಿಸಿ <span>＋</span></a><a href="/reminders">ಜ್ಞಾಪನೆ ರಚಿಸಿ <span>＋</span></a></div>
+
+        <div class="stats-grid">
+            <article class="stat-card">
+                <span class="stat-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 20v-9m0 4c-4.6 0-7-2.4-7-7 4.6 0 7 2.4 7 7Zm0-3c0-4 2.4-6.5 7-6.5 0 4.5-2.4 6.5-7 6.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="stat-label">ನಿಮ್ಮ ಬೆಳೆ</span>
+                <strong>@(Farm?.CropType ?? "ಅಡಿಕೆ")</strong>
+                <span class="data-origin">@(Farm?.IsDemo == true ? "ಮಾದರಿ ಡೇಟಾ" : "ನಿಮ್ಮ ದಾಖಲೆ")</span>
+            </article>
+            <article class="stat-card">
+                <span class="stat-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 4v5m0 0 7 4-7 4-7-4 7-4Zm0 0-7 4v5l7 4 7-4v-5M9 15l3 2 3-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 4V2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </span>
+                <span class="stat-label">ಜಮೀನು</span>
+                <strong>@(Farm?.AreaInAcres ?? 2) ಎಕರೆ</strong>
+                <span class="data-origin">@(Farm?.IsDemo == true ? "ಮಾದರಿ ಡೇಟಾ" : "ನಿಮ್ಮ ದಾಖಲೆ")</span>
+            </article>
+        </div>
+
+        <section class="ask-card" aria-labelledby="ask-title">
+            <div class="ask-heading">
+                <span class="chat-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5c-1.2 0-2.3-.3-3.3-.8L4 20l1.8-4.2A7.5 7.5 0 1 1 20 11.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <h2 id="ask-title">ಕೃಷಿಮಿತ್ರನನ್ನು ಕೇಳಿ</h2>
+            </div>
+            <p class="ask-copy">ನಿಮ್ಮ ಕೃಷಿಗೆ ಸಂಬಂಧಿಸಿದ ಪ್ರಶ್ನೆಗಳನ್ನು ಕೇಳಿ.</p>
+            <form class="ask-form" @onsubmit="AskQuestion" @onsubmit:preventDefault>
+                <label class="visually-hidden" for="question">ನಿಮ್ಮ ಪ್ರಶ್ನೆ</label>
+                <input id="question" @bind="Question" placeholder="ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಇಲ್ಲಿ ಬರೆಯಿರಿ..." autocomplete="off" />
+                <div class="ask-actions">
+                    @if (!string.IsNullOrWhiteSpace(Answer))
+                    {
+                        <p class="demo-answer" role="status">@Answer</p>
+                    }
+                    <button type="submit" disabled="@string.IsNullOrWhiteSpace(Question)">ಕೇಳಿ <span aria-hidden="true">→</span></button>
+                </div>
+            </form>
+        </section>
+
+        <section class="activities" aria-labelledby="activities-title">
+            <h2 id="activities-title">ಮುಂದಿನ ಚಟುವಟಿಕೆಗಳು</h2>
+            @if (Farm is not null) { <p class="welcome-copy location-copy">📍 @Farm.Location, @Farm.District</p> }
+            @foreach (var reminder in Upcoming)
+            {
+                <div class="activity-row"><span class="activity-name"><span class="activity-marker" aria-hidden="true"></span>@reminder.Title <small class="data-origin">@(reminder.IsDemo ? "ಮಾದರಿ" : "ನಿಮ್ಮದು")</small></span><span class="activity-date">@reminder.DueDate.ToString("dd MMM")</span></div>
+            }
+            @if (Upcoming.Count == 0) { <p class="empty-note">ಯಾವುದೇ ಮುಂದಿನ ಜ್ಞಾಪನೆಗಳಿಲ್ಲ. <a href="/reminders">ಜ್ಞಾಪನೆ ಸೇರಿಸಿ</a></p> }
+            @if (Recent.Count > 0)
+            {
+                <h3 class="subheading">ಇತ್ತೀಚಿನ ಚಟುವಟಿಕೆಗಳು</h3>
+                @foreach (var activity in Recent) { <div class="activity-row"><span class="activity-name"><span class="activity-marker" aria-hidden="true"></span>@activity.ActivityType · @activity.Description <small class="data-origin">@(activity.IsDemo ? "ಮಾದರಿ" : "ನಿಮ್ಮದು")</small></span><span class="activity-date">@activity.ActivityDate.ToString("dd MMM")</span></div> }
+            }
+        </section>
+    </section>
+
+    <footer class="page-footer">ಡೆಮೊ ಪ್ರೊಫೈಲ್ ಮತ್ತು ಕಲ್ಪಿತ ಕೃಷಿ ದಾಖಲೆಗಳು. Mock AI ಸಕ್ರಿಯವಾಗಿದ್ದರೆ ಉತ್ತರಗಳು ಡೆಮೊ ಎಂದು ಗುರುತಿಸಲಾಗುತ್ತವೆ.</footer>
+</div>
+
+@code {
+    private string Question { get; set; } = string.Empty;
+    private string Answer { get; set; } = string.Empty;
+    private Farm? Farm { get; set; }
+    private List<FarmReminder> Upcoming { get; set; } = [];
+    private List<FarmActivity> Recent { get; set; } = [];
+    private string LoadError { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Farm = (await Api.FarmsAsync()).FirstOrDefault();
+            if (Farm is not null)
+            {
+                Upcoming = await Api.GetAsync<List<FarmReminder>>($"api/farms/{Farm.Id}/reminders?status=upcoming") ?? [];
+                var result = await Api.GetAsync<ActivityResult>($"api/farms/{Farm.Id}/activities");
+                Recent = result?.Items ?? [];
+            }
+        }
+        catch { LoadError = "API server ಲಭ್ಯವಿಲ್ಲ. API ಅನ್ನು ಮೊದಲು ಪ್ರಾರಂಭಿಸಿ."; }
+    }
+
+    private async Task AskQuestion()
+    {
+        if (string.IsNullOrWhiteSpace(Question))
+            return;
+
+        try
+        {
+            var result = await Api.PostAsync<ChatOutput>("api/ai/chat", new ChatInput(Question.Trim()));
+            Answer = result?.Answer ?? "ಉತ್ತರ ಲಭ್ಯವಿಲ್ಲ.";
+            Question = string.Empty;
+        }
+        catch { Answer = "ಸಹಾಯಕವನ್ನು ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."; }
+    }
+
+    private sealed record ActivityResult(List<FarmActivity> Items, decimal TotalExpenses);
+}

@@ -1,0 +1,42 @@
+@page "/reminders"
+@rendermode InteractiveServer
+@inject KrishiMitra.Web.Services.FarmApiClient Api
+
+<PageTitle>ಜ್ಞಾಪನೆಗಳು — KrishiMitra</PageTitle>
+<section class="welcome-card page-card">
+    <p class="eyebrow">ಯೋಜನೆ ಮಾಡಿ</p><h1>ಜ್ಞಾಪನೆಗಳು</h1><p class="welcome-copy">ನಿಮ್ಮ ತೋಟದ ಕೆಲಸಗಳನ್ನು ನೆನಪಿನಲ್ಲಿ ಇಡಿ.</p>
+    @if (!string.IsNullOrEmpty(Message)) { <p class="notice @(Error ? "error" : "success")" role="status">@Message</p> }
+    <div class="toolbar"><label>ಸ್ಥಿತಿ <select @bind="Status" @bind:after="Load"><option value="">ಎಲ್ಲಾ</option><option value="upcoming">ಮುಂದಿನವು</option><option value="overdue">ತಡವಾದವು</option><option value="completed">ಪೂರ್ಣಗೊಂಡವು</option></select></label></div>
+    <EditForm Model="Form" OnValidSubmit="Save" class="entry-form">
+        <h2>@(EditingId is null ? "ಜ್ಞಾಪನೆ ಸೇರಿಸಿ" : "ಜ್ಞಾಪನೆ ತಿದ್ದುಪಡಿ")</h2><DataAnnotationsValidator /><ValidationSummary />
+        <div class="form-grid compact-grid"><label>ಶೀರ್ಷಿಕೆ<InputText @bind-Value="Form.Title" maxlength="120" required /></label><label>ದಿನಾಂಕ<InputDate @bind-Value="Form.DueDate" /></label><label class="wide-field">ವಿವರಣೆ (ಐಚ್ಛಿಕ)<InputText @bind-Value="Form.Description" maxlength="500" /></label></div>
+        <button class="primary-button" type="submit">@(EditingId is null ? "ಜ್ಞಾಪನೆ ಉಳಿಸಿ" : "ಬದಲಾವಣೆ ಉಳಿಸಿ")</button>
+        @if (EditingId is not null) { <button class="secondary-button" type="button" @onclick="Cancel">ರದ್ದು</button> }
+    </EditForm>
+    <div class="table-list">
+        @foreach (var item in Items)
+        {
+            <article class="record-row reminder-row"><div><strong>@item.Title <small class="data-origin">@(item.IsDemo ? "ಮಾದರಿ ಡೇಟಾ" : "ನಿಮ್ಮ ಜ್ಞಾಪನೆ")</small></strong><span>@item.Description</span><small>@item.DueDate.ToString("dd MMM yyyy") · @StatusText(item)</small></div><div class="row-actions"><button class="text-button" @onclick="() => Toggle(item)">@(item.IsCompleted ? "ಮತ್ತೆ ತೆರೆಯಿರಿ" : "ಪೂರ್ಣಗೊಳಿಸಿ")</button><button class="text-button" @onclick="() => Edit(item)">ತಿದ್ದು</button><button class="text-button danger-text" @onclick="() => Delete(item.Id)">ಅಳಿಸಿ</button></div></article>
+        }
+        @if (Items.Count == 0) { <p class="empty-note">ಈ ಸ್ಥಿತಿಯಲ್ಲಿ ಜ್ಞಾಪನೆಗಳಿಲ್ಲ. ಅಗತ್ಯವಿದ್ದಾಗ ಹೊಸದನ್ನು ಸೇರಿಸಿ.</p> }
+    </div>
+</section>
+
+@code {
+    private Farm? Farm { get; set; }
+    private List<FarmReminder> Items { get; set; } = [];
+    private ReminderForm Form { get; set; } = new();
+    private int? EditingId { get; set; }
+    private string Status { get; set; } = "";
+    private string Message { get; set; } = "";
+    private bool Error { get; set; }
+    protected override async Task OnInitializedAsync() { try { Farm = (await Api.FarmsAsync()).FirstOrDefault(); await Load(); } catch { Message = "API ಸಂಪರ್ಕ ವಿಫಲವಾಗಿದೆ. API ಅನ್ನು ಪ್ರಾರಂಭಿಸಿ."; Error = true; } }
+    private async Task Load() { if (Farm is not null) { var suffix = string.IsNullOrEmpty(Status) ? "" : "?status=" + Status; Items = await Api.GetAsync<List<FarmReminder>>($"api/farms/{Farm.Id}/reminders{suffix}") ?? []; } }
+    private async Task Save() { if (Farm is null) { Message = "ಮೊದಲು ನನ್ನ ತೋಟದಲ್ಲಿ ತೋಟದ ವಿವರಗಳನ್ನು ಸೇರಿಸಿ."; Error = true; return; } try { var input = new ReminderInput(Form.Title, Form.Description, Form.DueDate); if (EditingId is null) await Api.PostAsync<FarmReminder>($"api/farms/{Farm.Id}/reminders", input); else await Api.PutAsync<FarmReminder>($"api/farms/{Farm.Id}/reminders/{EditingId}", input); Form = new(); EditingId = null; Message = "ಜ್ಞಾಪನೆಯನ್ನು ಉಳಿಸಲಾಗಿದೆ."; Error = false; await Load(); } catch { Message = "ಜ್ಞಾಪನೆ ಉಳಿಸಲಾಗಲಿಲ್ಲ. ನಮೂದುಗಳನ್ನು ಪರಿಶೀಲಿಸಿ."; Error = true; } }
+    private async Task Toggle(FarmReminder x) { if (Farm is null) return; try { await Api.PutAsync<FarmReminder>($"api/farms/{Farm.Id}/reminders/{x.Id}", new ReminderInput(x.Title, x.Description, x.DueDate, !x.IsCompleted)); await Load(); } catch { Message = "ಸ್ಥಿತಿಯನ್ನು ಬದಲಾಯಿಸಲಾಗಲಿಲ್ಲ."; Error = true; } }
+    private void Edit(FarmReminder x) { EditingId = x.Id; Form = new() { Title = x.Title, Description = x.Description, DueDate = x.DueDate }; }
+    private void Cancel() { EditingId = null; Form = new(); }
+    private async Task Delete(int id) { if (Farm is null) return; try { await Api.DeleteAsync($"api/farms/{Farm.Id}/reminders/{id}"); await Load(); } catch { Message = "ಜ್ಞಾಪನೆಯನ್ನು ಅಳಿಸಲಾಗಲಿಲ್ಲ."; Error = true; } }
+    private static string StatusText(FarmReminder x) => x.IsCompleted ? "ಪೂರ್ಣ" : x.DueDate < DateOnly.FromDateTime(DateTime.Today) ? "ತಡವಾಗಿದೆ" : "ಬಾಕಿ";
+    private sealed class ReminderForm { [Required, StringLength(120)] public string Title { get; set; } = ""; [StringLength(500)] public string? Description { get; set; } public DateOnly DueDate { get; set; } = DateOnly.FromDateTime(DateTime.Today.AddDays(1)); }
+}
